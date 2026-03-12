@@ -1,134 +1,154 @@
-<div class="app-container" [class.dark]="isDark">
+<div class="page-wrapper" [class.dark]="isDark">
 
-  <!-- ================= HEADER ================= -->
+  <!-- TOAST -->
+  <div class="toast" *ngIf="showToast" [ngClass]="toastType">
+    {{ toastMessage }}
+  </div>
+
+  <!-- HEADER -->
   <div class="header">
+
     <h1>TaskNest 🚀</h1>
 
-    <div class="header-actions">
-     <select (change)="switchBoard(($any($event.target)).value)">
-        <option *ngFor="let b of boards" [value]="b.id">
-          {{ b.name }}
-        </option>
-      </select>
+    <!-- PROFILE -->
+    <div class="profile-container">
 
-      <button (click)="toggleTheme()">
-        {{ isDark ? '☀️ Light' : '🌙 Dark' }}
-      </button>
-    </div>
+      <div class="profile-btn" (click)="toggleProfileMenu()">
+        {{ userProfile?.name ? userProfile.name.charAt(0).toUpperCase() : 'G' }}
+      </div>
+
+     <div class="profile-menu" *ngIf="showProfileMenu">
+
+  <!-- USER INFO -->
+  <div class="profile-top">
+     <div class="avatar-big">
+        {{ userProfile?.name ? userProfile.name.charAt(0).toUpperCase() : 'G' }}
+     </div>
+
+     <div class="user-info">
+        <p class="user-name">{{ userProfile?.name || 'Guest User' }}</p>
+        <p class="user-email">{{ userProfile?.email || 'guest@mail.com' }}</p>
+     </div>
   </div>
 
-  <!-- ================= PROGRESS ================= -->
-  <div class="progress-wrapper">
-  <div class="progress-fill" [style.width.%]="getProgress()"></div>
+  <div class="divider"></div>
+
+  <div class="menu-item" (click)="openProfile()">
+     <span class="icon">👤</span>
+     <span>Profile</span>
+  </div>
+
+  <div class="menu-item" (click)="toggleTheme()">
+     <span class="icon">{{ isDark ? '☀' : '🌙' }}</span>
+     <span>{{ isDark ? 'Light Mode' : 'Dark Mode' }}</span>
+  </div>
+
+  <div class="divider"></div>
+
+  <div class="menu-item logout" (click)="logout()">
+     <span class="icon">🚪</span>
+     <span>Logout</span>
+  </div>
+
 </div>
-<p class="progress-text">{{getProgress()}}% Completed</p>
 
-  <div class="stats-section">
-  <div class="chart-box">
-  <canvas #progressChart></canvas>
+    </div>
 
-</div>
+  </div>
 
-</div>
+  <!-- STATS -->
+  <div class="top-stats">
 
-  <!-- ================= BOARD ================= -->
+    <div class="stat-card">
+      <h4>📦 Total Tasks</h4>
+      <p>{{ getTotalTasks() }}</p>
+    </div>
+
+    <div class="stat-card">
+      <h4>✅ Done</h4>
+      <p>{{ getDoneTasks() }}</p>
+    </div>
+
+    <div class="stat-card">
+      <h4>🚀 Progress</h4>
+      <p>{{ getProgress() }}%</p>
+    </div>
+
+  </div>
+
+  <!-- BOARD -->
   <div class="board">
 
-    <!-- TODO COLUMN -->
-    <div class="column todo"
+    <!-- COLUMNS -->
+    <div class="column"
+         *ngFor="let col of columns; let i = index"
+         [id]="col.id"
          cdkDropList
-         #todoList="cdkDropList"
-         [cdkDropListData]="todo"
-         [cdkDropListConnectedTo]="[progressList, doneList]"
-         (cdkDropListDropped)="drop($event)">
+         [cdkDropListData]="col.tasks"
+        [cdkDropListConnectedTo]="getConnectedDropLists()"
+         (cdkDropListDropped)="drop($event)"
+         [ngClass]="{
+           'todo': col.id === 'todo',
+           'progress': col.id === 'inProgress',
+           'done': col.id === 'done',
+           'custom-column': col.id !== 'todo' && col.id !== 'inProgress' && col.id !== 'done'
+         }">
 
-      <h2>To Do</h2>
-      <button class="add-btn" (click)="openAddModal('todo')">+ Add Task</button>
+      <!-- Column Header -->
+      <div class="column-header">
+        <h2>{{ col.title }}</h2>
+        <button *ngIf="i >= 3" (click)="deleteColumn(i)">❌</button>
+      </div>
 
+      <!-- Add Task -->
+      <button class="add-btn" (click)="openAddModal(col.id)">
+        + Add Task
+      </button>
+
+      <!-- TASK CARD -->
       <div class="card"
-           *ngFor="let task of todo"
-           cdkDrag
-           [class.overdue]="isOverdue(task.date)">
+           *ngFor="let task of col.tasks"
+           cdkDrag>
 
-        <span class="badge low">{{task.priority}}</span>
-        <h3>{{task.title}}</h3>
-        <p>{{task.description}}</p>
-        <small>{{task.date}}</small>
+        <span class="badge"
+              [ngClass]="{
+                high: task.priority === 'HIGH',
+                medium: task.priority === 'MEDIUM',
+                low: task.priority === 'LOW'
+              }">
+          {{ task.priority }}
+        </span>
+
+        <h3>{{ task.title }}</h3>
+        <p>{{ task.description }}</p>
+        <small>{{ task.date }}</small>
 
         <div class="actions">
-          <button (click)="openEditModal(task, 'todo')">✏️</button>
-          <button (click)="deleteTask(task, 'todo')">🗑</button>
+          <button (click)="openEditModal(task, col.id)">✏️</button>
+          <button (click)="deleteTask(task, col.id)">🗑</button>
         </div>
+
       </div>
 
     </div>
 
-    <!-- IN PROGRESS -->
-    <div class="column progress"
-         cdkDropList
-         #progressList="cdkDropList"
-         [cdkDropListData]="inProgress"
-         [cdkDropListConnectedTo]="[todoList, doneList]"
-         (cdkDropListDropped)="drop($event)">
-
-      <h2>In Progress</h2>
-      <button class="add-btn" (click)="openAddModal('inProgress')">+ Add Task</button>
-
-      <div class="card"
-           *ngFor="let task of inProgress"
-           cdkDrag
-           [class.overdue]="isOverdue(task.date)">
-
-        <span class="badge medium">{{task.priority}}</span>
-        <h3>{{task.title}}</h3>
-        <p>{{task.description}}</p>
-        <small>{{task.date}}</small>
-
-        <div class="actions">
-          <button (click)="openEditModal(task, 'inProgress')">✏️</button>
-          <button (click)="deleteTask(task, 'inProgress')">🗑</button>
-        </div>
+    <!-- ADD COLUMN -->
+    <div class="add-column-card" (click)="openColumnModal()">
+      <div>
+        <div class="plus-icon">+</div>
+        <p>Add Column</p>
       </div>
-
-    </div>
-
-    <!-- DONE -->
-    <div class="column done"
-         cdkDropList
-         #doneList="cdkDropList"
-         [cdkDropListData]="done"
-         [cdkDropListConnectedTo]="[todoList, progressList]"
-         (cdkDropListDropped)="drop($event)">
-
-      <h2>Done</h2>
-      <button class="add-btn" (click)="openAddModal('done')">+ Add Task</button>
-
-      <div class="card"
-           *ngFor="let task of done"
-           cdkDrag
-           [class.overdue]="isOverdue(task.date)">
-
-        <span class="badge high">{{task.priority}}</span>
-        <h3>{{task.title}}</h3>
-        <p>{{task.description}}</p>
-        <small>{{task.date}}</small>
-
-        <div class="actions">
-          <button (click)="openEditModal(task, 'done')">✏️</button>
-          <button (click)="deleteTask(task, 'done')">🗑</button>
-        </div>
-      </div>
-
     </div>
 
   </div>
 
-  <!-- ================= ADD MODAL ================= -->
+  <!-- ADD TASK MODAL -->
   <div class="modal" *ngIf="showAddModal">
     <div class="modal-content">
+
       <h2>Add Task</h2>
 
-      <input [(ngModel)]="newTask.title" placeholder="Title" />
+      <input [(ngModel)]="newTask.title" placeholder="Title">
       <textarea [(ngModel)]="newTask.description" placeholder="Description"></textarea>
 
       <label>Priority</label>
@@ -139,162 +159,83 @@
       </select>
 
       <label>Date</label>
-      <input type="date" [(ngModel)]="newTask.date" />
+      <input type="date" [(ngModel)]="newTask.date">
 
-      <div class="modal-actions">
-        <button (click)="saveNewTask()">Save</button>
-        <button (click)="closeAddModal()">Cancel</button>
-      </div>
+      <button (click)="saveNewTask()">Save</button>
+      <button (click)="showAddModal=false">Cancel</button>
+
     </div>
   </div>
 
-  <!-- ================= EDIT MODAL ================= -->
+  <!-- EDIT TASK -->
   <div class="modal" *ngIf="showEditModal">
     <div class="modal-content">
+
       <h2>Edit Task</h2>
 
-      <input [(ngModel)]="currentTask.title" />
+      <input [(ngModel)]="currentTask.title">
       <textarea [(ngModel)]="currentTask.description"></textarea>
 
-      <div class="modal-actions">
-        <button (click)="saveEdit()">Save</button>
-        <button (click)="closeEditModal()">Cancel</button>
-      </div>
+      <label>Priority</label>
+      <select [(ngModel)]="currentTask.priority">
+        <option value="HIGH">HIGH</option>
+        <option value="MEDIUM">MEDIUM</option>
+        <option value="LOW">LOW</option>
+      </select>
+
+      <label>Date</label>
+      <input type="date" [(ngModel)]="currentTask.date">
+
+      <button (click)="saveEdit()">Save</button>
+      <button (click)="showEditModal=false">Cancel</button>
+
+    </div>
+  </div>
+
+  <!-- ADD COLUMN MODAL -->
+  <div class="modal" *ngIf="showColumnModal">
+    <div class="modal-content">
+
+      <h2>Add New Column</h2>
+
+      <input [(ngModel)]="newColumnName" placeholder="Column Name">
+
+      <button (click)="addColumn()">Add</button>
+      <button (click)="showColumnModal=false">Cancel</button>
+
+    </div>
+  </div>
+
+  <!-- LOGIN MODAL -->
+  <div class="modal" *ngIf="showLoginModal">
+    <div class="modal-content">
+
+      <h2>Login 🔐</h2>
+
+      <input [(ngModel)]="loginData.name" placeholder="Name">
+      <input [(ngModel)]="loginData.email" placeholder="Email">
+      <input type="password" [(ngModel)]="loginData.password" placeholder="Password">
+      <input [(ngModel)]="loginData.phone" maxlength="10" placeholder="Phone">
+
+      <button (click)="login()">Login</button>
+      <button (click)="showLoginModal=false">Cancel</button>
+
+    </div>
+  </div>
+
+  <!-- PROFILE MODAL -->
+  <div class="modal" *ngIf="showProfileModal">
+    <div class="modal-content">
+
+      <h2>Profile 👤</h2>
+
+      <p><b>Name:</b> {{userProfile.name}}</p>
+      <p><b>Email:</b> {{userProfile.email}}</p>
+      <p><b>Phone:</b> {{userProfile.phone}}</p>
+
+      <button (click)="showProfileModal=false">Close</button>
+
     </div>
   </div>
 
 </div>
-<div class="footer-bar">
-  <div (click)="goHome()">🏠 Home</div>
-  <div (click)="openStats()">📊 Stats</div>
-  <div (click)="openAddModal('todo')">➕ Add</div>
-  <div (click)="openSettings()">⚙ Settings</div>
-  <div (click)="openProfile()">👤 Profile</div>
-</div>
-<div class="modal" *ngIf="showStats">
-  <div class="modal-content">
-    <h2>Statistics 📊</h2>
-    <p>Total Tasks: {{todo.length + inProgress.length + done.length}}</p>
-    <p>Completed: {{done.length}}</p>
-    <p>Progress: {{getProgress()}}%</p>
-    <button (click)="closeModal('stats')">Close</button>
-  </div>
-</div>
-<div class="modal" *ngIf="showSettings">
-  <div class="modal-content">
-    <h2>Settings ⚙</h2>
-    <button (click)="toggleTheme()">Toggle Theme</button>
-    <button (click)="clearAll()">Clear All Tasks</button>
-    <button (click)="closeModal('settings')">Close</button>
-  </div>
-</div>
-<div class="modal" *ngIf="showProfile">
-  <div class="modal-content">
-
-    <h2>User Profile 👤</h2>
-
-    <div *ngIf="!editProfileMode">
-      <p><strong>Name:</strong> {{profile.name}}</p>
-      <p><strong>Username:</strong> {{profile.username}}</p>
-      <p><strong>Email:</strong> {{profile.email}}</p>
-      <p><strong>Phone:</strong> {{profile.phone}}</p>
-      <p><strong>Role:</strong> {{profile.role}}</p>
-      <p><strong>About:</strong> {{profile.about}}</p>
-
-      <button (click)="editProfileMode = true">Edit</button>
-      <button (click)="closeFooterModal('profile')">Close</button>
-    </div>
-
-    <div *ngIf="editProfileMode">
-      <input [(ngModel)]="profile.name" placeholder="Name">
-      <input [(ngModel)]="profile.username" placeholder="Username">
-      <input [(ngModel)]="profile.email" placeholder="Email">
-      <input [(ngModel)]="profile.phone" placeholder="Phone">
-      <input [(ngModel)]="profile.role" placeholder="Role">
-      <textarea [(ngModel)]="profile.about" placeholder="About"></textarea>
-
-      <button (click)="saveProfile()">Save</button>
-      <button (click)="editProfileMode = false">Cancel</button>
-      <button class="login-btn" *ngIf="!profile.name">Login</button>
-
-    </div>
-
-  </div>
-</div>
-
-
-<div class="modal-overlay" *ngIf="showProfile">
-  <div class="profile-modal">
-
-    <h2>👤 User Profile</h2>
-
-    <!-- NAME -->
-    <div class="profile-row">
-      <span>📝 Name:</span>
-      <span *ngIf="!editProfileMode">{{profile.name}}</span>
-      <input *ngIf="editProfileMode" [(ngModel)]="profile.name">
-    </div>
-
-    <!-- EMAIL -->
-    <div class="profile-row">
-      <span>📧 Email:</span>
-      <span *ngIf="!editProfileMode">{{profile.email}}</span>
-      <input *ngIf="editProfileMode" [(ngModel)]="profile.email">
-    </div>
-
-    <!-- PHONE -->
-    <div class="profile-row">
-      <span>📱 Phone:</span>
-      <span *ngIf="!editProfileMode">{{profile.phone}}</span>
-      <input *ngIf="editProfileMode" [(ngModel)]="profile.phone">
-     <input
-  type="text"
-  maxlength="10"
-  [(ngModel)]="profile.phone"
-  (input)="validatePhone()"
-  placeholder="Enter 10 digit number"
-/>
-
-
-    </div>
-
-    <!-- ABOUT -->
-    <div class="profile-row">
-      <span>💡 About:</span>
-      <span *ngIf="!editProfileMode">{{profile.about}}</span>
-      <textarea *ngIf="editProfileMode" [(ngModel)]="profile.about"></textarea>
-    </div>
-
-    <!-- BUTTONS -->
-    <div class="profile-buttons">
-
-      <!-- VIEW MODE BUTTONS -->
-      <button *ngIf="!editProfileMode"
-              class="btn-edit"
-              (click)="editProfileMode = true">
-        ✏ Edit
-      </button>
-
-      <!-- EDIT MODE BUTTONS -->
-      <button *ngIf="editProfileMode"
-              class="btn-save"
-              (click)="saveProfile()">
-        💾 Save
-      </button>
-
-      <button class="btn-close"
-              (click)="showProfile = false">
-        ❌ Close
-      </button>
-
-      <button class="btn-logout"
-              (click)="logout()">
-        🚪 Logout
-      </button>
-
-    </div>
-
-  </div>
-</div>
-
-

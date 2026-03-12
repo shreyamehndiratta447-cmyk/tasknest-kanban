@@ -1,10 +1,30 @@
-import { Component, Inject, PLATFORM_ID, ViewChild, ElementRef, AfterViewInit } from '@angular/core';
+import {
+  Component,
+  Inject,
+  PLATFORM_ID,
+  ViewChild,
+  ElementRef,
+  AfterViewInit,
+  OnInit
+} from '@angular/core';
+
 import { CommonModule, isPlatformBrowser } from '@angular/common';
 import { FormsModule } from '@angular/forms';
-import { DragDropModule, CdkDragDrop, moveItemInArray, transferArrayItem } from '@angular/cdk/drag-drop';
+import {
+  DragDropModule,
+  CdkDragDrop,
+  moveItemInArray,
+  transferArrayItem
+} from '@angular/cdk/drag-drop';
+
 import { Chart } from 'chart.js/auto';
 
-type ColumnType = 'todo' | 'inProgress' | 'done';
+interface Column {
+  id: string;
+  title: string;
+  tasks: any[];
+  gradient?: string;
+}
 
 @Component({
   selector: 'app-kanban',
@@ -13,286 +33,367 @@ type ColumnType = 'todo' | 'inProgress' | 'done';
   templateUrl: './kanban.html',
   styleUrls: ['./kanban.css']
 })
-export class KanbanComponent implements AfterViewInit {
+export class KanbanComponent implements OnInit, AfterViewInit {
 
   constructor(@Inject(PLATFORM_ID) private platformId: Object) {}
+   getConnectedDropLists(): string[] {
+  return this.columns.map(col => col.id);
+}
+  // ===== PROFILE MENU =====
+  showProfileMenu = false;
+  toggleProfileMenu(){
+    this.showProfileMenu = !this.showProfileMenu;
+  }
 
-  // ================= VIEW CHILD =================
+  // ===== CHART =====
   @ViewChild('progressChart') chartRef!: ElementRef;
-chartInstance: any;
-  // ================= THEME =================
+  chartInstance: any;
+
+  // ===== STATE =====
+  currentBoard = 1;
   isDark = false;
 
-  // ================= BOARDS =================
-  currentBoard = 1;
-
-  // ================= TASKS =================
-  todo: any[] = [];
-  inProgress: any[] = [];
-  done: any[] = [];
-validatePhone() {
-  // remove non-digits
-  this.profile.phone = this.profile.phone.replace(/\D/g, '');
-
-  // limit to 10 digits
-  if (this.profile.phone.length > 10) {
-    this.profile.phone = this.profile.phone.slice(0, 10);
-  }
-}
-
-  // ================= MODALS =================
   showAddModal = false;
   showEditModal = false;
-  showSettings = false;
-  showProfile = false;
-  showStats = false;
+  showColumnModal = false;
 
-  // ================= PROFILE =================
-  profile: any = {
-    name: 'User',
-    email: 'user@email.com',
-    phone: '0000000000',
-    about: 'Task Manager User'
+  toastMessage = '';
+  toastType: 'success' | 'error' | '' = '';
+  showToast = false;
+
+  newColumnName = '';
+  selectedColumn = '';
+  editIndex = -1;
+
+  newTask: any = {
+    title: '',
+    description: '',
+    priority: 'LOW',
+    date: ''
   };
-  editProfileMode = false;
 
-  // ================= NEW TASK =================
-  selectedColumn: ColumnType = 'todo';
-  newTask: any = { title: '', description: '', priority: 'LOW', date: '' };
+  currentTask: any = {};
+  currentColumn = '';
 
-  // ================= EDIT TASK =================
-  currentTask: any = null;
-  currentColumn: ColumnType = 'todo';
+  // ===== LOGIN =====
+  isLoggedIn = false;
+  showLoginModal = false;
+  showProfileModal = false;
 
-  // ================= INIT =================
-  ngOnInit() {
+  loginData = {
+    name: '',
+    email: '',
+    password: '',
+    phone: ''
+  };
+
+  userProfile: any = {};
+
+  // ===== COLUMNS =====
+  columns: Column[] = [
+    { id: 'todo', title: '📋 To Do', tasks: [] },
+    { id: 'inProgress', title: '🚧 In Progress', tasks: [] },
+    { id: 'done', title: '✅ Done', tasks: [] }
+  ];
+
+  // ===== INIT =====
+  ngOnInit(){
+
+    this.loadTasks();
+
     if (isPlatformBrowser(this.platformId)) {
-      const theme = localStorage.getItem('theme');
-      this.isDark = theme === 'dark';
 
-      const savedProfile = localStorage.getItem('profile');
-      if (savedProfile) this.profile = JSON.parse(savedProfile);
-
-      this.loadTasks();
-    }
-  }
-
-  ngAfterViewInit() {
-    if (isPlatformBrowser(this.platformId)) {
-      setTimeout(() => this.createChart(), 200);
-    }
-  }
-
-  // ================= TASK STORAGE =================
-  saveTasks() {
-    if (isPlatformBrowser(this.platformId)) {
-      localStorage.setItem(`tasks_${this.currentBoard}`, JSON.stringify({
-        todo: this.todo,
-        inProgress: this.inProgress,
-        done: this.done
-      }));
-    }
-  }
-
-  loadTasks() {
-    if (isPlatformBrowser(this.platformId)) {
-      const data = localStorage.getItem(`tasks_${this.currentBoard}`);
-      if (data) {
-        const parsed = JSON.parse(data);
-        this.todo = parsed.todo || [];
-        this.inProgress = parsed.inProgress || [];
-        this.done = parsed.done || [];
+      const savedTheme = localStorage.getItem('theme');
+      if(savedTheme === 'dark'){
+        this.isDark = true;
+        document.body.classList.add('dark');
       }
+
+      const savedUser = localStorage.getItem('tasknest_user');
+      if(savedUser){
+        this.userProfile = JSON.parse(savedUser);
+        this.isLoggedIn = true;
+      }
+
     }
   }
 
-  // ================= THEME =================
-  toggleTheme() {
-    this.isDark = !this.isDark;
+  ngAfterViewInit(){
     if (isPlatformBrowser(this.platformId)) {
-      localStorage.setItem('theme', this.isDark ? 'dark' : 'light');
+      setTimeout(()=> this.createChart(),200);
     }
   }
 
-  // ================= ADD TASK =================
-  openAddModal(column: ColumnType) {
-    this.selectedColumn = column;
+  // ===== DRAG CONNECT =====
+  getConnectedLists(currentId: string): string[] {
+    return this.columns.map(c => c.id);
+  }
+
+  // ===== STORAGE =====
+  saveTasks(){
+    if (isPlatformBrowser(this.platformId)) {
+      localStorage.setItem(
+        `tasks_${this.currentBoard}`,
+        JSON.stringify(this.columns)
+      );
+    }
+  }
+
+  loadTasks(){
+    if (!isPlatformBrowser(this.platformId)) return;
+
+    const data = localStorage.getItem(`tasks_${this.currentBoard}`);
+    if (!data) return;
+
+    const parsed = JSON.parse(data);
+
+    this.columns.forEach(col=>{
+      const saved = parsed.find((c:any)=>c.id === col.id);
+      if(saved) col.tasks = saved.tasks || [];
+    });
+
+    parsed.forEach((savedCol:any)=>{
+      if(!this.columns.find(c=>c.id === savedCol.id)){
+        this.columns.push(savedCol);
+      }
+    });
+  }
+
+  // ===== TOAST =====
+  showNotification(message:string,type:'success'|'error'='success'){
+    this.toastMessage = message;
+    this.toastType = type;
+    this.showToast = true;
+
+    setTimeout(()=> this.showToast=false,3000);
+  }
+
+  // ===== TASK =====
+  openAddModal(columnId:string){
+    this.selectedColumn = columnId;
     this.showAddModal = true;
   }
 
-  saveNewTask() {
-    if (!this.newTask.title) return;
-    this[this.selectedColumn].push({ ...this.newTask });
-    this.resetNewTask();
-    this.showAddModal = false;
+  saveNewTask(){
+    if(!this.newTask.title.trim()){
+      this.showNotification('⚠ Please enter task title','error');
+      return;
+    }
+
+    const column = this.columns.find(c=>c.id === this.selectedColumn);
+    if(!column) return;
+
+    column.tasks.push({...this.newTask});
+
     this.saveTasks();
     this.refreshChart();
+
+    this.newTask = { title:'',description:'',priority:'LOW',date:'' };
+    this.showAddModal = false;
   }
 
-  resetNewTask() {
-    this.newTask = { title: '', description: '', priority: 'LOW', date: '' };
+  drop(event: CdkDragDrop<any[]>) {
+
+  if (event.previousContainer === event.container) {
+    moveItemInArray(
+      event.container.data,
+      event.previousIndex,
+      event.currentIndex
+    );
+  } else {
+    transferArrayItem(
+      event.previousContainer.data,
+      event.container.data,
+      event.previousIndex,
+      event.currentIndex
+    );
   }
 
-  // ================= EDIT TASK =================
- editIndex: number = -1;
-
-openEditModal(task: any, column: ColumnType) {
-  this.currentColumn = column;
-  this.editIndex = this[column].indexOf(task);
-  this.currentTask = { ...task };
-  this.showEditModal = true;
-}
-
-saveEdit() {
-  if (this.editIndex > -1) {
-    this[this.currentColumn][this.editIndex] = this.currentTask;
-  }
-  this.showEditModal = false;
   this.saveTasks();
   this.refreshChart();
 }
 
+  // ===== THEME =====
+  toggleTheme(){
 
-  // ================= DELETE =================
-  deleteTask(task: any, column: ColumnType) {
-    this[column] = this[column].filter(t => t !== task);
-    this.saveTasks();
-    this.refreshChart();
+  this.isDark = !this.isDark;
+
+  if (isPlatformBrowser(this.platformId)) {
+    localStorage.setItem('theme', this.isDark ? 'dark' : 'light');
   }
 
-  // ================= DRAG DROP =================
-  drop(event: CdkDragDrop<any[]>) {
-    if (event.previousContainer === event.container) {
-      moveItemInArray(event.container.data, event.previousIndex, event.currentIndex);
-    } else {
-      transferArrayItem(
-        event.previousContainer.data,
-        event.container.data,
-        event.previousIndex,
-        event.currentIndex
-      );
+}
+
+  // ===== LOGIN =====
+  openLogin(){ this.showLoginModal = true; }
+
+  login(){
+
+    if(!this.loginData.name.trim()){
+      this.showNotification('Name Required','error'); return;
     }
-    this.saveTasks();
-    this.refreshChart();
-  }
 
-  // ================= PROFILE =================
-  saveProfile() {
-    if (this.profile.phone.length !== 10) {
-    alert('Phone number must be exactly 10 digits');
-    return;
-  }
+    if(!this.loginData.email.includes('@')){
+      this.showNotification('Invalid Email','error'); return;
+    }
 
-  this.editProfileMode = false;
-  localStorage.setItem('profile', JSON.stringify(this.profile));
-    this.editProfileMode = false;
+    if(this.loginData.password.length < 6){
+      this.showNotification('Password must be 6+ chars','error'); return;
+    }
+
+    if(this.loginData.phone.length !== 10){
+      this.showNotification('Phone must be 10 digits','error'); return;
+    }
+
+    this.userProfile = {...this.loginData};
+
     if (isPlatformBrowser(this.platformId)) {
-      localStorage.setItem('profile', JSON.stringify(this.profile));
+      localStorage.setItem('tasknest_user',JSON.stringify(this.userProfile));
     }
+
+    this.isLoggedIn = true;
+    this.showLoginModal = false;
+    this.showNotification('Login Successful 🚀');
+
+    this.loginData = { name:'',email:'',password:'',phone:'' };
   }
 
-  // ================= FOOTER =================
-  closeFooterModal(type: string) {
-    if (type === 'profile') this.showProfile = false;
-    if (type === 'settings') this.showSettings = false;
-    if (type === 'stats') this.showStats = false;
-  }
+  logout(){
 
-  clearAll() {
-    this.todo = [];
-    this.inProgress = [];
-    this.done = [];
-    this.saveTasks();
-    this.refreshChart();
-  }
-
-  // ================= PROGRESS =================
-  getProgress() {
-    const total = this.todo.length + this.inProgress.length + this.done.length;
-    return total === 0 ? 0 : Math.round((this.done.length / total) * 100);
-  }
-
-  // ================= CHART =================
- createChart() {
-  if (!this.chartRef) return;
-
-  const ctx = this.chartRef.nativeElement.getContext('2d');
-
-  if (this.chartInstance) {
-    this.chartInstance.destroy();
-  }
-
-  this.chartInstance = new Chart(ctx, {
-    type: 'doughnut',
-    data: {
-      labels: ['Completed', 'Remaining'],
-      datasets: [{
-        data: [this.done.length, this.todo.length + this.inProgress.length],
-        backgroundColor: ['#22c55e', '#ef4444'],
-        borderWidth: 0
-      }]
-    },
-    options: {
-      responsive: true,
-      maintainAspectRatio: false,
-      cutout: '70%',
-      plugins: { legend: { display: false } }
+    if (isPlatformBrowser(this.platformId)) {
+      localStorage.removeItem('tasknest_user');
     }
-  });
+
+    this.isLoggedIn = false;
+    this.userProfile = {};
+    this.showNotification('Logged Out');
+  }
+
+  openProfile(){
+    if(!this.isLoggedIn){ this.openLogin(); return; }
+    this.showProfileModal = true;
+  }
+
+  // ===== CHART =====
+  createChart(){
+    if(!this.chartRef) return;
+
+    const ctx = this.chartRef.nativeElement.getContext('2d');
+    if(this.chartInstance) this.chartInstance.destroy();
+
+    this.chartInstance = new Chart(ctx,{
+      type:'doughnut',
+      data:{
+        labels:['Completed','Remaining'],
+        datasets:[{
+          data:[
+            this.getDoneTasks(),
+            this.getTotalTasks()-this.getDoneTasks()
+          ],
+          backgroundColor:['#22c55e','#ef4444'],
+          borderWidth:0
+        }]
+      },
+      options:{
+        responsive:true,
+        maintainAspectRatio:false,
+        cutout:'70%',
+        plugins:{ legend:{display:false}}
+      }
+    });
+  }
+
+  refreshChart(){
+    setTimeout(()=> this.createChart(),100);
+  }
+
+  getTotalTasks(){
+    return this.columns.reduce((t,c)=>t+c.tasks.length,0);
+  }
+
+  getDoneTasks(){
+    const done = this.columns.find(c=>c.id==='done');
+    return done ? done.tasks.length : 0;
+  }
+// ===== EDIT TASK =====
+openEditModal(task: any, columnId: string) {
+  const column = this.columns.find(c => c.id === columnId);
+  if (!column) return;
+
+  this.editIndex = column.tasks.indexOf(task);
+  this.currentTask = { ...task };
+  this.currentColumn = columnId;
+  this.showEditModal = true;
 }
 
+saveEdit() {
+  const column = this.columns.find(c => c.id === this.currentColumn);
+  if (!column || this.editIndex === -1) return;
 
-  refreshChart() {
-    setTimeout(() => this.createChart(), 100);
-  }
-boards = [
-  { id: 1, name: 'Personal' },
-  { id: 2, name: 'Work' }
-];
-switchBoard(id: number) {
-  this.currentBoard = +id;
-  this.loadTasks();
+  column.tasks[this.editIndex] = { ...this.currentTask };
+
+  this.saveTasks();
   this.refreshChart();
-}
-isOverdue(date: string) {
-  if (!date) return false;
-  return new Date(date) < new Date();
-}
-closeAddModal() {
-  this.showAddModal = false;
-  this.resetNewTask();
-}
 
-closeEditModal() {
+  this.editIndex = -1;
   this.showEditModal = false;
 }
-goHome() {
-  window.scrollTo({ top: 0, behavior: 'smooth' });
+
+// ===== DELETE TASK =====
+deleteTask(task: any, columnId: string) {
+  const column = this.columns.find(c => c.id === columnId);
+  if (!column) return;
+
+  column.tasks = column.tasks.filter(t => t !== task);
+
+  this.saveTasks();
+  this.refreshChart();
 }
 
-openStats() {
-  this.showStats = true;
+// ===== ADD COLUMN =====
+openColumnModal() {
+  this.showColumnModal = true;
 }
 
-openSettings() {
-  this.showSettings = true;
+addColumn() {
+
+  if (!this.newColumnName.trim()) return;
+
+  const gradients = [
+    'linear-gradient(135deg, #6366f1, #8b5cf6)',
+    'linear-gradient(135deg, #0ea5e9, #06b6d4)',
+    'linear-gradient(135deg, #ec4899, #f43f5e)',
+    'linear-gradient(135deg, #14b8a6, #22c55e)',
+    'linear-gradient(135deg, #f59e0b, #f97316)'
+  ];
+
+  const randomGradient =
+    gradients[Math.floor(Math.random() * gradients.length)];
+
+  this.columns.push({
+    id: this.newColumnName.toLowerCase().replace(/\s/g, ''),
+    title: `✨ ${this.newColumnName}`,
+    tasks: [],
+    gradient: randomGradient
+  });
+
+  this.saveTasks();
+  this.newColumnName = '';
+  this.showColumnModal = false;
 }
 
-openProfile() {
-  this.showProfile = true;
+// ===== DELETE COLUMN =====
+deleteColumn(index: number) {
+  if (index < 3) return;
+
+  this.columns.splice(index, 1);
+  this.saveTasks();
 }
 
-closeModal(type: string) {
-  if (type === 'stats') this.showStats = false;
-  if (type === 'settings') this.showSettings = false;
-  if (type === 'profile') this.showProfile = false;
+// ===== PROGRESS =====
+getProgress(): number {
+  const total = this.getTotalTasks();
+  const done = this.getDoneTasks();
+  return total === 0 ? 0 : Math.round((done / total) * 100);
 }
-logout() {
-  if (isPlatformBrowser(this.platformId)) {
-    localStorage.clear();
-    location.reload();
-  }
-
-}
-
 }
